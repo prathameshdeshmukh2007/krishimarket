@@ -5,6 +5,18 @@
 
 ---
 
+## 🌐 Live Deployments & Links
+
+| Service | Link | Status / Details |
+| :--- | :--- | :--- |
+| **🚀 Live on Vercel** | **[temporary-swift-zinc-vwkdpxu.vercel.app](https://temporary-swift-zinc-vwkdpxu.vercel.app)** | 🟢 **Live Production Site** |
+| **⚡ Vercel Account** | **[vercel.com/prathameshdeshmukh2007-2420](https://vercel.com/prathameshdeshmukh2007-2420)** | Official Vercel Workspace |
+| **📦 GitHub Repository** | **[github.com/prathameshdeshmukh2007/krishimarket](https://github.com/prathameshdeshmukh2007/krishimarket)** | Official Source Code |
+| **🎁 1-Click Claim to Account** | **[Claim Deployment](https://vercel.com/claim-deployment?code=ed11c3d5-8031-4693-8759-da22bf419b57)** | Attaches deployment directly to @prathameshdeshmukh2007-2420 |
+| **🔄 Auto CI/CD Vercel Deploy** | **[Deploy with Vercel Button](https://vercel.com/new/clone?repository-url=https://github.com/prathameshdeshmukh2007/krishimarket&project-name=krishimarket)** | Auto-deploys on every `git push` |
+
+---
+
 ## ✨ Key Features
 
 1. **🌾 Farmer & Merchant Dashboards**
