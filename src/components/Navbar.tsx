@@ -70,10 +70,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [showMoreDropdown, setShowMoreDropdown] = useState(false);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
 
-  // Farmer Primary Navigation Items (Simple 5 items per Section 25)
+  // Farmer Primary Navigation Items (Exactly 5 items)
   const primaryNavItems = [
     { id: 'home', label: t.navHome, icon: '🏡' },
     { id: 'market_prices', label: t.navMarketPrice, icon: '📈' },
+    { id: 'global_trade', label: t.navGlobalTrade, icon: '🚢' },
     { id: 'sell_store', label: t.navSellStore, icon: '📦' },
     { id: 'transactions', label: t.navTransactions, icon: '🧾' },
   ];

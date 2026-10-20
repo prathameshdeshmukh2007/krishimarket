@@ -15,6 +15,7 @@ pnpm-debug.log*
 lerna-debug.log*
 
 # Environment and Local Configs
+.env
 .env.local
 .env.*.local
 *.local
@@ -35,3 +36,5 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+.vercel

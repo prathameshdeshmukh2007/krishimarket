@@ -18,6 +18,7 @@ import { CropLotsAndPassportView } from './components/CropLotsAndPassportView';
 import { BuyerMarketplaceView } from './components/BuyerMarketplaceView';
 import { FpoAggregationView } from './components/FpoAggregationView';
 import { AdminDataHealthView } from './components/AdminDataHealthView';
+import { GlobalTradeView } from './components/GlobalTradeView';
 import { CameraCaptureModal } from './components/CameraCaptureModal';
 import { AuthModal } from './components/AuthModal';
 import { VoiceAssistantModal } from './components/VoiceAssistantModal';
@@ -409,6 +410,15 @@ export function App() {
           />
         )}
 
+        {/* 3B. GLOBAL TRADE & EXPORT INTELLIGENCE MODULE */}
+        {activeTab === 'global_trade' && (
+          <GlobalTradeView
+            userProfile={farmerProfile || undefined}
+            language={language}
+            onNavigateHome={() => setActiveTab('home')}
+          />
+        )}
+
         {/* 4. AI SELL OR STORE RECOMMENDATION */}
         {activeTab === 'sell_store' && (
           <FarmerDecisionHeroView
@@ -582,10 +592,13 @@ export function App() {
         </button>
 
         <button
-          onClick={() => setShowVoiceModal(true)}
-          className="flex flex-col items-center -mt-5 p-2 rounded-full bg-amber-400 text-slate-950 shadow-lg border-2 border-white dark:border-slate-900"
+          onClick={() => setActiveTab('global_trade')}
+          className={`flex flex-col items-center gap-0.5 p-1 text-[11px] font-bold ${
+            activeTab === 'global_trade' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'
+          }`}
         >
-          <Mic className="w-5 h-5" />
+          <span className="text-lg">🚢</span>
+          <span>{t.navGlobalTrade || 'Global Trade'}</span>
         </button>
 
         <button
@@ -599,13 +612,11 @@ export function App() {
         </button>
 
         <button
-          onClick={() => setActiveTab('ask_ai')}
-          className={`flex flex-col items-center gap-0.5 p-1 text-[11px] font-bold ${
-            activeTab === 'ask_ai' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'
-          }`}
+          onClick={() => setShowVoiceModal(true)}
+          className="flex flex-col items-center gap-0.5 p-1 text-[11px] font-bold text-slate-500"
         >
-          <span className="text-lg">🤖</span>
-          <span>{t.navAskAi}</span>
+          <span className="text-lg">🎙️</span>
+          <span>Voice AI</span>
         </button>
       </div>
 
