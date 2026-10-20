@@ -18,10 +18,14 @@ import {
   UserCheck,
   Navigation,
   Phone,
-  MapPin
+  MapPin,
+  RefreshCw,
+  ExternalLink
 } from 'lucide-react';
 import { CropLot, Commodity, LanguageCode, FarmVisitAppointment } from '../types';
 import { CameraCaptureModal } from './CameraCaptureModal';
+import { ImageCloudInspectorModal } from './ImageCloudInspectorModal';
+import { CloudImageRecord, cloudImageService } from '../services/cloudImageService';
 import { translations } from '../i18n/translations';
 
 interface CropLotsAndPassportViewProps {
@@ -29,6 +33,7 @@ interface CropLotsAndPassportViewProps {
   commodities: Commodity[];
   language: LanguageCode;
   onAddLot: (newLot: CropLot) => void;
+  onUpdateLot?: (updatedLot: CropLot) => void;
   onSelectLotForPassport?: (lot: CropLot) => void;
   appointments?: FarmVisitAppointment[];
 }
@@ -38,15 +43,21 @@ export const CropLotsAndPassportView: React.FC<CropLotsAndPassportViewProps> = (
   commodities,
   language,
   onAddLot,
+  onUpdateLot,
   appointments = []
 }) => {
   const t = translations[language];
 
   const [selectedLot, setSelectedLot] = useState<CropLot>(cropLots[0]);
   const [showCameraModal, setShowCameraModal] = useState<boolean>(false);
+  const [lotToUpdatePhoto, setLotToUpdatePhoto] = useState<CropLot | null>(null);
+  const [inspectingRecord, setInspectingRecord] = useState<CloudImageRecord | null>(null);
+
+  // Keep selected lot fresh if cropLots updates
+  const activeLot = cropLots.find(l => l.id === selectedLot?.id) || selectedLot || cropLots[0];
 
   // Relevant appointments for selected lot
-  const lotAppointments = appointments.filter(a => a.lotId === selectedLot.id);
+  const lotAppointments = appointments.filter(a => a.lotId === activeLot.id);
 
   return (
     <div className="space-y-6">
@@ -150,15 +161,15 @@ export const CropLotsAndPassportView: React.FC<CropLotsAndPassportViewProps> = (
                 </div>
 
                 <h2 className="text-2xl font-black text-white font-mono tracking-tight">
-                  {selectedLot.lotCode}
+                  {activeLot.lotCode}
                 </h2>
                 <p className="text-xs text-slate-400">
-                  Farmer: <strong className="text-slate-200">{selectedLot.farmerName}</strong> ({selectedLot.farmerPhone}) • {selectedLot.village}, {selectedLot.district}, {selectedLot.state}
+                  Farmer: <strong className="text-slate-200">{activeLot.farmerName}</strong> ({activeLot.farmerPhone}) • {activeLot.village}, {activeLot.district}, {activeLot.state}
                 </p>
-                {selectedLot.farmAddress && (
+                {activeLot.farmAddress && (
                   <p className="text-[11px] text-emerald-400 flex items-center gap-1 mt-0.5">
                     <MapPin className="w-3 h-3" />
-                    <span>Farm Location: {selectedLot.farmAddress}</span>
+                    <span>Farm Location: {activeLot.farmAddress}</span>
                   </p>
                 )}
               </div>
@@ -179,50 +190,96 @@ export const CropLotsAndPassportView: React.FC<CropLotsAndPassportViewProps> = (
               <div className="md:col-span-2 grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div className="bg-slate-900/90 p-3 rounded-lg border border-slate-800">
                   <span className="text-[10px] font-mono text-slate-400 uppercase">Crop Commodity</span>
-                  <div className="text-sm font-bold text-white mt-0.5">{selectedLot.commodity}</div>
+                  <div className="text-sm font-bold text-white mt-0.5">{activeLot.commodity}</div>
                 </div>
 
                 <div className="bg-slate-900/90 p-3 rounded-lg border border-slate-800">
                   <span className="text-[10px] font-mono text-slate-400 uppercase">Variety</span>
-                  <div className="text-sm font-bold text-slate-200 mt-0.5">{selectedLot.variety}</div>
+                  <div className="text-sm font-bold text-slate-200 mt-0.5">{activeLot.variety}</div>
                 </div>
 
                 <div className="bg-slate-900/90 p-3 rounded-lg border border-slate-800">
                   <span className="text-[10px] font-mono text-slate-400 uppercase">Total Quantity</span>
-                  <div className="text-sm font-mono font-bold text-emerald-400 mt-0.5">{selectedLot.quantityQuintals} Quintals</div>
+                  <div className="text-sm font-mono font-bold text-emerald-400 mt-0.5">{activeLot.quantityQuintals} Quintals</div>
                 </div>
 
                 <div className="bg-slate-900/90 p-3 rounded-lg border border-slate-800">
                   <span className="text-[10px] font-mono text-slate-400 uppercase">Expected Harvest</span>
-                  <div className="text-sm font-mono font-bold text-slate-200 mt-0.5">{selectedLot.expectedHarvestDate}</div>
+                  <div className="text-sm font-mono font-bold text-slate-200 mt-0.5">{activeLot.expectedHarvestDate}</div>
                 </div>
 
                 <div className="bg-slate-900/90 p-3 rounded-lg border border-slate-800">
                   <span className="text-[10px] font-mono text-slate-400 uppercase">AI Prelim Grade</span>
-                  <div className="text-sm font-mono font-bold text-emerald-300 mt-0.5">{selectedLot.aiPreliminaryGrade}</div>
+                  <div className="text-sm font-mono font-bold text-emerald-300 mt-0.5">{activeLot.aiPreliminaryGrade}</div>
                 </div>
 
                 <div className="bg-slate-900/90 p-3 rounded-lg border border-slate-800">
                   <span className="text-[10px] font-mono text-slate-400 uppercase">Verified Final Grade</span>
-                  <div className="text-sm font-mono font-bold text-amber-400 mt-0.5">{selectedLot.verifiedGrade}</div>
+                  <div className="text-sm font-mono font-bold text-amber-400 mt-0.5">{activeLot.verifiedGrade}</div>
                 </div>
               </div>
 
-              {/* Photo Preview */}
-              <div className="md:col-span-1 rounded-xl overflow-hidden border border-slate-800 relative bg-slate-950 aspect-video md:aspect-auto">
-                <img
-                  src={selectedLot.photos[0] || 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=800&auto=format&fit=crop&q=80'}
-                  alt={selectedLot.commodity}
-                  className="w-full h-full object-cover"
-                />
-                <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-slate-950/80 text-emerald-400 border border-slate-800">
-                  Photo Proof
-                </span>
+              {/* Photo Preview & Cloud Inspection Box */}
+              <div className="md:col-span-1 flex flex-col gap-2">
+                <div className="rounded-xl overflow-hidden border border-slate-800 relative bg-slate-950 aspect-video md:aspect-auto h-44 group cursor-pointer"
+                  onClick={() => {
+                    const record = cloudImageService.getOrCreateRecordForLot(activeLot);
+                    setInspectingRecord(record);
+                  }}
+                >
+                  <img
+                    src={activeLot.photos[0] || 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=800&auto=format&fit=crop&q=80'}
+                    alt={activeLot.commodity}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
+                  
+                  {/* Hover Overlay */}
+                  <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1.5 p-3">
+                    <span className="px-3 py-1.5 rounded-lg bg-emerald-500 text-slate-950 font-bold font-mono text-xs flex items-center gap-1.5 shadow-lg">
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Inspect Cloud Photo</span>
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-300">Zoom 2.5x & Verify GPS</span>
+                  </div>
+
+                  <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-slate-950/85 text-emerald-400 border border-slate-800">
+                    Cloud Proof Verified
+                  </span>
+                </div>
+
+                {/* Direct Action Buttons Under Photo */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const record = cloudImageService.getOrCreateRecordForLot(activeLot);
+                      setInspectingRecord(record);
+                    }}
+                    className="py-2 px-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-emerald-400 font-bold text-[11px] font-mono flex items-center justify-center gap-1 transition-all"
+                    title="View high-resolution real clicked photo with zoom and provenance"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>View Cloud</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLotToUpdatePhoto(activeLot);
+                      setShowCameraModal(true);
+                    }}
+                    className="py-2 px-2.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-bold text-[11px] font-mono flex items-center justify-center gap-1 transition-all"
+                    title="Retake or change photo of this produce lot"
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                    <span>Change Photo</span>
+                  </button>
+                </div>
               </div>
             </div>
 
             {/* AI Preliminary Visual Assessment Card */}
-            {selectedLot.aiAssessment && (
+            {activeLot.aiAssessment && (
               <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/30 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-xs font-mono font-bold text-emerald-400 uppercase">
@@ -230,27 +287,27 @@ export const CropLotsAndPassportView: React.FC<CropLotsAndPassportViewProps> = (
                     <span>{t.aiVisualAssessment}</span>
                   </div>
                   <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono">
-                    Scan Confidence: {selectedLot.aiAssessment.confidenceScore}%
+                    Scan Confidence: {activeLot.aiAssessment.confidenceScore}%
                   </span>
                 </div>
 
                 <div className="grid grid-cols-3 gap-3 text-xs font-mono">
                   <div className="bg-slate-950/80 p-2 rounded border border-slate-800 text-center">
                     <span className="text-[10px] text-slate-400 block">{t.colorUniformity}</span>
-                    <span className="font-bold text-emerald-400">{selectedLot.aiAssessment.colorUniformityPct}%</span>
+                    <span className="font-bold text-emerald-400">{activeLot.aiAssessment.colorUniformityPct}%</span>
                   </div>
                   <div className="bg-slate-950/80 p-2 rounded border border-slate-800 text-center">
                     <span className="text-[10px] text-slate-400 block">{t.maturityScore}</span>
-                    <span className="font-bold text-emerald-400">{selectedLot.aiAssessment.maturityIndexPct}%</span>
+                    <span className="font-bold text-emerald-400">{activeLot.aiAssessment.maturityIndexPct}%</span>
                   </div>
                   <div className="bg-slate-950/80 p-2 rounded border border-slate-800 text-center">
                     <span className="text-[10px] text-slate-400 block">{t.visibleDefects}</span>
-                    <span className="font-bold text-slate-300">{selectedLot.aiAssessment.visibleDefectsPct}%</span>
+                    <span className="font-bold text-slate-300">{activeLot.aiAssessment.visibleDefectsPct}%</span>
                   </div>
                 </div>
 
                 <div className="space-y-1 text-xs text-slate-300">
-                  {selectedLot.aiAssessment.assessmentNotes.map((n, i) => (
+                  {activeLot.aiAssessment.assessmentNotes.map((n, i) => (
                     <p key={i} className="flex items-center gap-1.5">
                       <span className="text-emerald-400 font-bold">•</span>
                       <span>{n}</span>
@@ -259,7 +316,7 @@ export const CropLotsAndPassportView: React.FC<CropLotsAndPassportViewProps> = (
                 </div>
 
                 <p className="text-[10px] text-slate-400 italic pt-1 border-t border-slate-800/80 font-mono">
-                  * {selectedLot.aiAssessment.disclaimer}
+                  * {activeLot.aiAssessment.disclaimer}
                 </p>
               </div>
             )}
@@ -297,7 +354,7 @@ export const CropLotsAndPassportView: React.FC<CropLotsAndPassportViewProps> = (
               </h3>
 
               <div className="space-y-4 relative before:absolute before:left-3.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-800 pl-8">
-                {selectedLot.passportEvents.map((evt) => (
+                {activeLot.passportEvents.map((evt) => (
                   <div key={evt.id} className="relative group">
                     <div className="absolute -left-8 top-1 w-7 h-7 rounded-full bg-slate-900 border border-emerald-500/60 flex items-center justify-center text-xs text-emerald-400 font-mono shadow">
                       ✓
@@ -325,14 +382,41 @@ export const CropLotsAndPassportView: React.FC<CropLotsAndPassportViewProps> = (
       {/* Live Camera Capture & Upload Modal */}
       <CameraCaptureModal
         isOpen={showCameraModal}
-        onClose={() => setShowCameraModal(false)}
+        onClose={() => {
+          setShowCameraModal(false);
+          setLotToUpdatePhoto(null);
+        }}
         commodities={commodities}
         language={language}
+        targetLot={lotToUpdatePhoto || undefined}
         onLotCreated={(lot) => {
           onAddLot(lot);
           setSelectedLot(lot);
+          setShowCameraModal(false);
+        }}
+        onPhotoUpdated={(updatedLot) => {
+          setSelectedLot(updatedLot);
+          if (onUpdateLot) onUpdateLot(updatedLot);
+          setShowCameraModal(false);
+          setLotToUpdatePhoto(null);
         }}
       />
+
+      {/* Cloud Image Provenance & Zoom Inspector Modal */}
+      {inspectingRecord && (
+        <ImageCloudInspectorModal
+          isOpen={!!inspectingRecord}
+          onClose={() => setInspectingRecord(null)}
+          imageRecord={inspectingRecord}
+          canRetakePhoto={true}
+          onRequestRetake={() => {
+            const currentLot = cropLots.find(l => l.id === inspectingRecord.lotId) || activeLot;
+            setInspectingRecord(null);
+            setLotToUpdatePhoto(currentLot);
+            setShowCameraModal(true);
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -19,13 +19,17 @@ import {
   Phone,
   Truck,
   ArrowRight,
-  Camera
+  Camera,
+  Eye,
+  Maximize2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { CropLot, BuyerOffer, FarmVisitAppointment, LanguageCode } from '../types';
 import { INITIAL_BUYER_OFFERS } from '../data/initialData';
 import { FarmVisitsModal } from './FarmVisitsModal';
 import { DirectBuyModal } from './DirectBuyModal';
+import { ImageCloudInspectorModal } from './ImageCloudInspectorModal';
+import { CloudImageRecord, cloudImageService } from '../services/cloudImageService';
 import { translations } from '../i18n/translations';
 
 interface BuyerMarketplaceViewProps {
@@ -58,6 +62,7 @@ export const BuyerMarketplaceView: React.FC<BuyerMarketplaceViewProps> = ({
   const [lotForVisit, setLotForVisit] = useState<CropLot | null>(null);
   const [lotForBuy, setLotForBuy] = useState<CropLot | null>(null);
   const [lotForOffer, setLotForOffer] = useState<CropLot | null>(null);
+  const [inspectingImageRecord, setInspectingImageRecord] = useState<CloudImageRecord | null>(null);
   const [offerPrice, setOfferPrice] = useState<number>(2550);
   const [offerQty, setOfferQty] = useState<number>(50);
   const [transportTerm, setTransportTerm] = useState<'BUYER' | 'FARMER'>('BUYER');
@@ -214,12 +219,19 @@ export const BuyerMarketplaceView: React.FC<BuyerMarketplaceViewProps> = ({
                 className="glass-panel rounded-2xl border border-slate-800 hover:border-emerald-500/50 transition-all flex flex-col justify-between overflow-hidden group shadow-lg"
               >
                 <div>
-                  {/* Photo Header */}
-                  <div className="relative h-48 w-full bg-slate-950 overflow-hidden">
+                  {/* Photo Header with Real Cloud Photo Inspector */}
+                  <div 
+                    onClick={() => {
+                      const record = cloudImageService.getOrCreateRecordForLot(lot);
+                      setInspectingImageRecord(record);
+                    }}
+                    className="relative h-48 w-full bg-slate-950 overflow-hidden cursor-pointer group/photo"
+                    title="Click to inspect real clicked cloud photo with 2.5x zoom and provenance"
+                  >
                     <img
                       src={lot.photos[0] || 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=800&auto=format&fit=crop&q=80'}
                       alt={lot.commodity}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      className="w-full h-full object-cover group-hover/photo:scale-105 transition-transform duration-300"
                     />
                     <div className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded bg-slate-950/85 border border-slate-700 text-[10px] font-mono text-emerald-400 font-bold">
                       {lot.lotCode}
@@ -227,6 +239,14 @@ export const BuyerMarketplaceView: React.FC<BuyerMarketplaceViewProps> = ({
 
                     <div className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded bg-emerald-950/90 border border-emerald-500/40 text-[10px] font-mono text-emerald-300 font-bold">
                       {lot.aiPreliminaryGrade}
+                    </div>
+
+                    {/* Inspection Hover Overlay */}
+                    <div className="absolute inset-0 bg-slate-950/50 opacity-0 group-hover/photo:opacity-100 transition-opacity flex items-center justify-center">
+                      <span className="px-3 py-1.5 rounded-lg bg-emerald-500/95 text-slate-950 font-bold font-mono text-xs flex items-center gap-1.5 shadow-xl">
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>Inspect Real Cloud Photo</span>
+                      </span>
                     </div>
 
                     <div className="absolute bottom-2.5 left-2.5 right-2.5 bg-slate-950/90 backdrop-blur-md p-2.5 rounded-xl border border-slate-800/80 flex items-center justify-between text-xs font-mono">
@@ -483,6 +503,16 @@ export const BuyerMarketplaceView: React.FC<BuyerMarketplaceViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Cloud Image Provenance & Zoom Inspector Modal for Merchants */}
+      {inspectingImageRecord && (
+        <ImageCloudInspectorModal
+          isOpen={!!inspectingImageRecord}
+          onClose={() => setInspectingImageRecord(null)}
+          imageRecord={inspectingImageRecord}
+          canRetakePhoto={false}
+        />
       )}
     </div>
   );

@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { LanguageCode } from '../types';
 import { translations } from '../i18n/translations';
-import { answerAgriculturalQuery, speakText } from '../services/voiceAssistantService';
+import { answerAgriculturalQuery, answerAgriculturalQueryAsync, speakText } from '../services/voiceAssistantService';
 
 interface VoiceAssistantModalProps {
   isOpen: boolean;
@@ -31,6 +31,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
   const t = translations[language];
 
   const [isListening, setIsListening] = useState<boolean>(false);
+  const [isThinking, setIsThinking] = useState<boolean>(false);
   const [transcript, setTranscript] = useState<string>('');
   const [aiResponse, setAiResponse] = useState<string>('');
   const [actionTab, setActionTab] = useState<string | undefined>(undefined);
@@ -50,23 +51,33 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       setTranscript('');
       setAiResponse('');
       setIsListening(false);
+      setIsThinking(false);
       window.speechSynthesis?.cancel();
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const handleAskQuery = (queryText: string) => {
+  const handleAskQuery = async (queryText: string) => {
     setTranscript(queryText);
     setIsListening(false);
+    setIsThinking(true);
 
-    const result = answerAgriculturalQuery(queryText, language);
-    setAiResponse(result.answerText);
-    setActionTab(result.actionSuggestion);
-    setIsOffTopic(!!result.isOffTopic);
+    try {
+      const result = await answerAgriculturalQueryAsync(queryText, language);
+      setAiResponse(result.answerText);
+      setActionTab(result.actionSuggestion);
+      setIsOffTopic(!!result.isOffTopic);
 
-    // Speak AI response in chosen language
-    speakText(result.answerText, language);
+      // Speak AI response in chosen language
+      speakText(result.answerText, language);
+    } catch {
+      const fallback = answerAgriculturalQuery(queryText, language);
+      setAiResponse(fallback.answerText);
+      speakText(fallback.answerText, language);
+    } finally {
+      setIsThinking(false);
+    }
   };
 
   const handleToggleListening = () => {

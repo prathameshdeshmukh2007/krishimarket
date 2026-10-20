@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "test": "node tests/test-runner.mjs",
+    "test": "node tests/test-runner.mjs && npx tsx tests/test-ai-cloud.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

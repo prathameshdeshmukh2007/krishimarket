@@ -266,6 +266,10 @@ export function App() {
     setActiveTab('home');
   };
 
+  const handleUpdateCropLot = (updatedLot: CropLot) => {
+    setCropLots(prev => prev.map(lot => lot.id === updatedLot.id ? updatedLot : lot));
+  };
+
   const handleAddAppointment = (appt: FarmVisitAppointment) => {
     setAppointments([appt, ...appointments]);
   };
@@ -529,6 +533,7 @@ export function App() {
             commodities={commodities}
             language={language}
             onAddLot={handleAddCropLot}
+            onUpdateLot={handleUpdateCropLot}
             appointments={appointments}
           />
         )}
