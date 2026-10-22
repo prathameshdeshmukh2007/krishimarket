@@ -10,7 +10,8 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 export const STORAGE_KEY_SUPABASE_URL = 'km_supabase_url_v1';
 export const STORAGE_KEY_SUPABASE_KEY = 'km_supabase_key_v1';
 
-// The verified publishable key provided by the user
+// Verified Supabase Project credentials provided by user
+export const DEFAULT_SUPABASE_URL = 'https://daueuwmenqrvhykzmdbr.supabase.co';
 export const DEFAULT_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_jv_qDGe9OjvwPRxpDT7l8g_-8_laixj';
 
 export interface SupabaseConnectionStatus {
@@ -66,6 +67,10 @@ class SupabaseManager {
       key = (import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '').trim();
     }
 
+    if (!url) {
+      url = DEFAULT_SUPABASE_URL;
+    }
+
     if (!key) {
       key = DEFAULT_SUPABASE_PUBLISHABLE_KEY;
     }
@@ -89,12 +94,14 @@ class SupabaseManager {
     // Only recreate if credentials changed or client is uninitialized
     if (!this.client || this.currentUrl !== url || this.currentKey !== key) {
       try {
+        const isBrowser = typeof window !== 'undefined';
         this.client = createClient(url, key, {
           auth: {
-            persistSession: true,
-            autoRefreshToken: true,
-            detectSessionInUrl: true
-          }
+            persistSession: isBrowser,
+            autoRefreshToken: isBrowser,
+            detectSessionInUrl: isBrowser
+          },
+          ...(isBrowser ? {} : { realtime: { transport: null } as any })
         });
         this.currentUrl = url;
         this.currentKey = key;

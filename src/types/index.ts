@@ -232,6 +232,11 @@ export interface AIAssessment {
   disclaimer: string;
   assessmentNotes: string[];
   assessedAt: string;
+  averageDiameterMm?: string;
+  diseaseDiagnosis?: string;
+  treatmentRecommendation?: string;
+  properInfo?: string;
+  providerUsed?: 'live_gemini_vision' | 'expert_agronomist_engine';
 }
 
 export interface PassportTimelineEvent {

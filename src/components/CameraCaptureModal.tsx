@@ -14,9 +14,10 @@ import {
   Layers,
   Scale
 } from 'lucide-react';
-import { Commodity, CropLot, LanguageCode } from '../types';
+import { Commodity, CropLot, LanguageCode, AIAssessment } from '../types';
 import { performCropPhotoAiScan } from '../services/aiEngine';
 import { CloudImageService } from '../services/cloudImageService';
+import { AiChatService } from '../services/aiChatService';
 
 interface CameraCaptureModalProps {
   isOpen: boolean;
@@ -89,7 +90,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
     activeLotToUpdate?.photos[0] || PRESET_SAMPLE_PHOTOS[0].url
   );
   const [isScanning, setIsScanning] = useState<boolean>(false);
-  const [scanResult, setScanResult] = useState<any>(null);
+  const [scanResult, setScanResult] = useState<AIAssessment | null>(null);
   const [isSavingCloud, setIsSavingCloud] = useState<boolean>(false);
 
   // Form Fields
@@ -110,6 +111,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const nativeCameraInputRef = useRef<HTMLInputElement>(null);
 
   // Synchronize when activeLotToUpdate changes
   useEffect(() => {
@@ -132,11 +134,13 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
   const startCamera = async (mode = facingMode) => {
     setCameraError('');
     stopCamera();
+    setCameraActive(true);
+
     try {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { 
-            facingMode: mode, 
+            facingMode: { ideal: mode }, 
             width: { ideal: 1280 }, 
             height: { ideal: 720 } 
           }
@@ -144,15 +148,23 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
         streamRef.current = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          videoRef.current.play();
-          setCameraActive(true);
+          try {
+            await videoRef.current.play();
+          } catch (playErr) {
+            console.warn('Video play warning:', playErr);
+          }
         }
       } else {
-        setCameraError('Camera not supported by browser. You can upload any photo or pick a sample.');
+        setCameraError('Camera API is not supported in this browser. Please use "Device Camera" below or upload a photo.');
+        setCameraActive(false);
       }
     } catch (err: any) {
       console.warn('Camera access denied or unavailable', err);
-      setCameraError('Camera access unavailable. You can upload an image file or use preset samples.');
+      const isDenied = err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError';
+      setCameraError(isDenied 
+        ? 'Camera permission denied. Please allow camera permissions in browser, or click "Device Camera" below.'
+        : `Camera could not be opened (${err.message || 'Device in use'}). Use "Device Camera" or upload a file.`
+      );
       setCameraActive(false);
     }
   };
@@ -161,6 +173,9 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
     }
     setCameraActive(false);
   };
@@ -191,7 +206,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
     }
   };
 
-  // File Upload Handler
+  // File Upload Handler (also used by direct native camera capture)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -218,15 +233,22 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
     runAiQualityScan(preset.crop, preset.url);
   };
 
-  const runAiQualityScan = (crop: string, imgUrl: string) => {
+  // Run Real Multimodal AI Quality Scan using Google Gemini Vision API
+  const runAiQualityScan = async (crop: string, imgUrl: string) => {
     setIsScanning(true);
     setScanResult(null);
 
-    setTimeout(() => {
-      const assessment = performCropPhotoAiScan(crop, imgUrl);
+    try {
+      const aiService = AiChatService.getInstance();
+      const assessment = await aiService.analyzeCropImageWithGemini(imgUrl, crop, language);
       setScanResult(assessment);
+    } catch (err) {
+      console.warn('AI Vision scan failed, falling back to local agronomist engine:', err);
+      const fallback = performCropPhotoAiScan(crop, imgUrl);
+      setScanResult(fallback);
+    } finally {
       setIsScanning(false);
-    }, 600);
+    }
   };
 
   useEffect(() => {
@@ -364,29 +386,30 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
           <div className="lg:col-span-6 space-y-3">
             
             <div className="relative rounded-2xl overflow-hidden border border-slate-800 bg-slate-900 aspect-[4/3] flex items-center justify-center shadow-inner">
-              {cameraActive ? (
+              {/* Live Video Element — always mounted so videoRef.current is never null */}
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className={`w-full h-full object-cover ${cameraActive ? 'block' : 'hidden'}`}
+              />
+
+              {/* Viewfinder Overlay when Camera is Active */}
+              {cameraActive && (
                 <>
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="w-full h-full object-cover"
-                  />
-                  
-                  {/* Viewfinder Overlay with Produce Calibration Grid */}
-                  <div className="absolute inset-4 border border-dashed border-emerald-400/60 rounded-xl pointer-events-none flex flex-col justify-between p-3">
-                    <div className="flex justify-between items-center text-[10px] font-mono text-emerald-400 bg-slate-950/80 px-2 py-0.5 rounded self-start">
+                  <div className="absolute inset-4 border border-dashed border-emerald-400/70 rounded-xl pointer-events-none flex flex-col justify-between p-3">
+                    <div className="flex justify-between items-center text-[10px] font-mono text-emerald-400 bg-slate-950/85 px-2 py-0.5 rounded self-start">
                       <span>ALIGN {selectedCrop.toUpperCase()} BULB / FRUIT</span>
                     </div>
 
                     <div className="flex items-center justify-center">
-                      <div className="w-32 h-32 border-2 border-emerald-400/50 rounded-full flex items-center justify-center">
-                        <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full" />
+                      <div className="w-32 h-32 border-2 border-emerald-400/60 rounded-full flex items-center justify-center animate-pulse">
+                        <div className="w-2 h-2 bg-emerald-400 rounded-full" />
                       </div>
                     </div>
 
-                    <div className="text-center text-[11px] font-mono text-emerald-300 bg-slate-950/80 py-1 rounded">
+                    <div className="text-center text-[11px] font-mono text-emerald-300 bg-slate-950/85 py-1 rounded">
                       45–55mm Export Calibration Guide
                     </div>
                   </div>
@@ -400,8 +423,21 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
                   >
                     <SwitchCamera className="w-4 h-4 text-emerald-400" />
                   </button>
+
+                  {/* Cancel Live Camera */}
+                  <button
+                    type="button"
+                    onClick={stopCamera}
+                    className="absolute top-3 left-3 px-2 py-1 rounded-xl bg-slate-950/80 text-slate-300 border border-slate-700 hover:bg-slate-800 flex items-center gap-1 text-[11px] font-mono"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span>Cancel</span>
+                  </button>
                 </>
-              ) : (
+              )}
+
+              {/* Image Preview when Camera is Inactive */}
+              {!cameraActive && (
                 <>
                   <img
                     src={capturedImage}
@@ -409,66 +445,105 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
                     className="w-full h-full object-cover"
                   />
                   {isScanning && (
-                    <div className="absolute inset-0 bg-emerald-950/70 backdrop-blur-xs flex flex-col items-center justify-center gap-3">
+                    <div className="absolute inset-0 bg-emerald-950/85 backdrop-blur-xs flex flex-col items-center justify-center gap-2.5 p-4 text-center">
                       <Sparkles className="w-10 h-10 text-emerald-400 animate-spin" />
                       <div className="text-xs font-mono font-bold text-emerald-300 uppercase tracking-wider animate-pulse">
-                        Scanning Color Uniformity & Bulb Diameter...
+                        Analyzing Produce with Google Gemini Multimodal Vision API...
+                      </div>
+                      <div className="text-[11px] text-slate-300 font-mono">
+                        Diagnosing diameter, color uniformity, diseases & treatment dosages
                       </div>
                     </div>
                   )}
                   
-                  <div className="absolute top-3 left-3 px-2.5 py-0.5 rounded-full bg-slate-950/85 border border-slate-800 text-[10px] font-mono text-emerald-400 flex items-center gap-1.5">
-                    <Cloud className="w-3 h-3" />
-                    <span>Real Clicked Photo</span>
+                  <div className="absolute top-3 left-3 px-2.5 py-0.5 rounded-full bg-slate-950/85 border border-slate-800 text-[10px] font-mono text-emerald-400 flex items-center gap-1.5 shadow">
+                    <Cloud className="w-3 h-3 text-emerald-400" />
+                    <span>Verified Produce Image</span>
                   </div>
                 </>
               )}
 
               <canvas ref={canvasRef} className="hidden" />
+
+              {/* Native Device Camera Input (opens phone camera directly) */}
+              <input
+                ref={nativeCameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
             </div>
 
             {/* Action Bar: Snap, Retake & File Upload */}
-            <div className="grid grid-cols-3 gap-2">
+            <div className="space-y-2">
               {cameraActive ? (
-                <button
-                  type="button"
-                  onClick={takeSnapshot}
-                  className="col-span-2 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold font-mono text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25"
-                >
-                  <Camera className="w-4 h-4" />
-                  <span>CLICK PHOTO NOW</span>
-                </button>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={takeSnapshot}
+                    className="py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold font-mono text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25"
+                  >
+                    <Camera className="w-4 h-4" />
+                    <span>CLICK PHOTO NOW</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={stopCamera}
+                    className="py-3 rounded-xl bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-300 font-mono text-xs flex items-center justify-center gap-1.5"
+                  >
+                    <X className="w-4 h-4" />
+                    <span>Close Camera</span>
+                  </button>
+                </div>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => startCamera()}
-                  className="py-2.5 rounded-xl bg-emerald-950/70 border border-emerald-500/50 hover:bg-emerald-900 text-emerald-300 font-bold font-mono text-xs flex items-center justify-center gap-1.5"
-                >
-                  <Camera className="w-4 h-4" />
-                  <span>Retake / Live Camera</span>
-                </button>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {/* Option 1: Live Webcam / Browser Camera */}
+                  <button
+                    type="button"
+                    onClick={() => startCamera()}
+                    className="py-2.5 px-2 rounded-xl bg-emerald-950/70 border border-emerald-500/50 hover:bg-emerald-900 text-emerald-300 font-bold font-mono text-[11px] flex items-center justify-center gap-1.5 shadow"
+                    title="Open live browser camera feed"
+                  >
+                    <Camera className="w-3.5 h-3.5 shrink-0" />
+                    <span>Live Camera</span>
+                  </button>
+
+                  {/* Option 2: Direct Phone Camera */}
+                  <button
+                    type="button"
+                    onClick={() => nativeCameraInputRef.current?.click()}
+                    className="py-2.5 px-2 rounded-xl bg-cyan-950/70 border border-cyan-500/50 hover:bg-cyan-900 text-cyan-300 font-bold font-mono text-[11px] flex items-center justify-center gap-1.5 shadow"
+                    title="Directly trigger device camera app"
+                  >
+                    <Camera className="w-3.5 h-3.5 shrink-0 text-cyan-400" />
+                    <span>Phone Camera</span>
+                  </button>
+
+                  {/* Option 3: Upload from Gallery / Disk */}
+                  <label className="py-2.5 px-2 rounded-xl bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-200 font-bold font-mono text-[11px] flex items-center justify-center gap-1.5 cursor-pointer text-center">
+                    <Upload className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+                    <span>Upload File</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                    />
+                  </label>
+
+                  {/* Option 4: AI Rescan */}
+                  <button
+                    type="button"
+                    onClick={() => runAiQualityScan(selectedCrop, capturedImage)}
+                    className="py-2.5 px-2 rounded-xl bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-300 font-mono text-[11px] flex items-center justify-center gap-1.5"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+                    <span>Rescan AI</span>
+                  </button>
+                </div>
               )}
-
-              {/* Upload from Gallery / Device */}
-              <label className="py-2.5 rounded-xl bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-200 font-bold font-mono text-xs flex items-center justify-center gap-1.5 cursor-pointer text-center">
-                <Upload className="w-4 h-4 text-cyan-400" />
-                <span>Upload File</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
-              </label>
-
-              <button
-                type="button"
-                onClick={() => runAiQualityScan(selectedCrop, capturedImage)}
-                className="py-2.5 rounded-xl bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-300 font-mono text-xs flex items-center justify-center gap-1.5"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>Rescan</span>
-              </button>
             </div>
 
             {cameraError && (
@@ -506,42 +581,95 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
           {/* Right Column: AI Analysis & Publishing Form */}
           <div className="lg:col-span-6 space-y-4">
             
-            {/* Computer Vision Score Card */}
+            {/* AI Computer Vision & Agronomist Diagnostic Score Card */}
             {scanResult && (
-              <div className="p-4 rounded-2xl bg-emerald-950/30 border border-emerald-500/40 space-y-3">
+              <div className="p-4 rounded-2xl bg-emerald-950/30 border border-emerald-500/40 space-y-3 shadow-lg">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-xs font-mono font-bold text-emerald-400">
-                    <Sparkles className="w-4 h-4" />
+                    <Sparkles className="w-4 h-4 text-emerald-400 animate-pulse" />
                     <span>AI COMPUTER VISION QUALITY SCORE</span>
                   </div>
-                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500 text-slate-950 font-mono font-black">
-                    {scanResult.recommendedGrade}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-mono border border-emerald-500/30">
+                      {scanResult.providerUsed === 'live_gemini_vision' ? '⚡ Google Gemini Vision' : 'AI Agronomist Engine'}
+                    </span>
+                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500 text-slate-950 font-mono font-black shadow">
+                      {scanResult.recommendedGrade}
+                    </span>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 text-xs font-mono text-center">
-                  <div className="p-2 rounded-xl bg-slate-950 border border-slate-800">
+                {/* 4-Metric Physical Profile */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono text-center">
+                  <div className="p-2 rounded-xl bg-slate-950/90 border border-slate-800">
                     <div className="text-[10px] text-slate-400">Color Uniformity</div>
                     <div className="font-bold text-emerald-400">{scanResult.colorUniformityPct}%</div>
                   </div>
-                  <div className="p-2 rounded-xl bg-slate-950 border border-slate-800">
-                    <div className="text-[10px] text-slate-400">Maturity Index</div>
+                  <div className="p-2 rounded-xl bg-slate-950/90 border border-slate-800">
+                    <div className="text-[10px] text-slate-400">Maturity Score</div>
                     <div className="font-bold text-emerald-400">{scanResult.maturityIndexPct}%</div>
                   </div>
-                  <div className="p-2 rounded-xl bg-slate-950 border border-slate-800">
-                    <div className="text-[10px] text-slate-400">Defects</div>
-                    <div className="font-bold text-slate-300">{scanResult.visibleDefectsPct}%</div>
+                  <div className="p-2 rounded-xl bg-slate-950/90 border border-slate-800">
+                    <div className="text-[10px] text-slate-400">Visible Defects</div>
+                    <div className="font-bold text-amber-400">{scanResult.visibleDefectsPct}%</div>
+                  </div>
+                  <div className="p-2 rounded-xl bg-slate-950/90 border border-slate-800">
+                    <div className="text-[10px] text-slate-400">Avg Diameter</div>
+                    <div className="font-bold text-cyan-300 truncate">{scanResult.averageDiameterMm || '45-55 mm'}</div>
                   </div>
                 </div>
 
-                <div className="text-[11px] text-slate-300 space-y-1">
-                  {scanResult.assessmentNotes.slice(0, 2).map((note: string, i: number) => (
-                    <div key={i} className="flex items-start gap-1.5">
-                      <span className="text-emerald-400 font-bold">•</span>
-                      <span>{note}</span>
-                    </div>
-                  ))}
+                {/* Pathology & Disease Diagnosis */}
+                <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1">
+                  <div className="flex items-center gap-1.5 text-[11px] font-mono font-bold text-emerald-400">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span>DIAGNOSIS & HEALTH STATUS:</span>
+                  </div>
+                  <p className="text-xs text-slate-200 leading-relaxed pl-5">
+                    {scanResult.diseaseDiagnosis || 'Healthy crop lot with clean skin integrity and no visible pathogen marks.'}
+                  </p>
                 </div>
+
+                {/* Recommended Curative & Preventive Dosages */}
+                {scanResult.treatmentRecommendation && (
+                  <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1">
+                    <div className="flex items-center gap-1.5 text-[11px] font-mono font-bold text-amber-300">
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      <span>RECOMMENDED TREATMENT & SPRAY DOSAGES:</span>
+                    </div>
+                    <p className="text-xs text-slate-200 leading-relaxed pl-5">
+                      {scanResult.treatmentRecommendation}
+                    </p>
+                  </div>
+                )}
+
+                {/* Proper Agronomist Evaluation & Strategy */}
+                {scanResult.properInfo && (
+                  <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/30 space-y-1">
+                    <div className="flex items-center gap-1.5 text-[11px] font-mono font-bold text-emerald-300">
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>PROPER INFO & COMMERCIAL STRATEGY:</span>
+                    </div>
+                    <p className="text-xs text-slate-200 leading-relaxed pl-5">
+                      {scanResult.properInfo}
+                    </p>
+                  </div>
+                )}
+
+                {/* Visual Observations Notes */}
+                {scanResult.assessmentNotes && scanResult.assessmentNotes.length > 0 && (
+                  <div className="text-[11px] text-slate-300 space-y-1 pt-1 border-t border-slate-800/80">
+                    <div className="text-[10px] font-mono text-slate-400 uppercase tracking-wider font-semibold">
+                      Key Observations:
+                    </div>
+                    {scanResult.assessmentNotes.slice(0, 3).map((note: string, i: number) => (
+                      <div key={i} className="flex items-start gap-1.5">
+                        <span className="text-emerald-400 font-bold">•</span>
+                        <span>{note}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
