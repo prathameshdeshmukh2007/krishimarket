@@ -5,15 +5,16 @@
 // ====================================================================
 
 import { LanguageCode } from '../types';
+import { claudeService, ClaudeApiError } from './claudeService';
 
-export type AiProvider = 'gemini' | 'openai';
+export type AiProvider = 'gemini' | 'openai' | 'claude';
 
 export interface AiChatMessage {
   id: string;
   sender: 'user' | 'ai';
   text: string;
   timestamp: string;
-  providerUsed?: 'live_gemini' | 'live_openai' | 'expert_agronomist_engine';
+  providerUsed?: 'live_gemini' | 'live_openai' | 'live_claude' | 'expert_agronomist_engine';
   actionTab?: string;
 }
 
@@ -62,9 +63,15 @@ export class AiChatService {
       const storedProvider = (localStorage.getItem(STORAGE_KEY_PROVIDER) || 'gemini') as AiProvider;
 
       if (storedKey && storedKey.trim().length > 0) {
+        const trimmed = storedKey.trim();
+        const detectedProvider: AiProvider = trimmed.startsWith('sk-ant-')
+          ? 'claude'
+          : trimmed.startsWith('sk-')
+          ? 'openai'
+          : storedProvider as AiProvider;
         return {
-          apiKey: storedKey.trim(),
-          provider: storedKey.startsWith('sk-') ? 'openai' : storedProvider,
+          apiKey: trimmed,
+          provider: detectedProvider,
           isCustomKey: true
         };
       }
@@ -75,21 +82,16 @@ export class AiChatService {
     // Fallback to Vite environment variables
     const envGemini = (import.meta as any)?.env?.VITE_GEMINI_API_KEY || '';
     const envOpenAi = (import.meta as any)?.env?.VITE_OPENAI_API_KEY || '';
+    const envClaude = (import.meta as any)?.env?.VITE_CLAUDE_API_KEY || '';
 
     if (envGemini && envGemini.trim().length > 0) {
-      return {
-        apiKey: envGemini.trim(),
-        provider: 'gemini',
-        isCustomKey: false
-      };
+      return { apiKey: envGemini.trim(), provider: 'gemini', isCustomKey: false };
     }
-
+    if (envClaude && envClaude.trim().length > 0) {
+      return { apiKey: envClaude.trim(), provider: 'claude', isCustomKey: false };
+    }
     if (envOpenAi && envOpenAi.trim().length > 0) {
-      return {
-        apiKey: envOpenAi.trim(),
-        provider: 'openai',
-        isCustomKey: false
-      };
+      return { apiKey: envOpenAi.trim(), provider: 'openai', isCustomKey: false };
     }
 
     return {
@@ -110,9 +112,19 @@ export class AiChatService {
       return;
     }
 
-    const detectedProvider: AiProvider = trimmed.startsWith('sk-') ? 'openai' : provider;
+    const detectedProvider: AiProvider = trimmed.startsWith('sk-ant-')
+      ? 'claude'
+      : trimmed.startsWith('sk-')
+      ? 'openai'
+      : provider;
+
     localStorage.setItem(STORAGE_KEY_API_KEY, trimmed);
     localStorage.setItem(STORAGE_KEY_PROVIDER, detectedProvider);
+
+    // Also sync to claudeService storage if it's a Claude key
+    if (detectedProvider === 'claude') {
+      claudeService.setApiKey(trimmed);
+    }
   }
 
   public hasActiveKey(): boolean {
@@ -130,7 +142,7 @@ export class AiChatService {
     history: { sender: 'user' | 'ai'; text: string }[] = []
   ): Promise<{
     answerText: string;
-    providerUsed: 'live_gemini' | 'live_openai' | 'expert_agronomist_engine';
+    providerUsed: 'live_gemini' | 'live_openai' | 'live_claude' | 'expert_agronomist_engine';
     actionSuggestion?: string;
   }> {
     const config = this.getApiKeyConfig();
@@ -138,14 +150,22 @@ export class AiChatService {
     // 1. If real API key is present: execute live API call!
     if (config.apiKey) {
       try {
-        if (config.provider === 'gemini') {
+        if (config.provider === 'claude') {
+          const res = await claudeService.askClaude(userQuestion, language,
+            history.map(h => ({ role: h.sender === 'user' ? 'user' : 'assistant' as const, content: h.text }))
+          );
+          return {
+            answerText: res.answerText,
+            providerUsed: 'live_claude',
+            actionSuggestion: res.actionSuggestion
+          };
+        } else if (config.provider === 'gemini') {
           return await this.callGeminiApi(userQuestion, config.apiKey, language, history);
         } else {
           return await this.callOpenAiApi(userQuestion, config.apiKey, language, history);
         }
       } catch (err: any) {
         console.error('Live AI API Call failed, falling back to Agronomist Engine:', err);
-        // Fall through to agronomist engine with an explanation note
         const fallback = this.getDeepAgronomistAnswer(userQuestion, language);
         return {
           answerText: `⚠️ [API Notice: ${err.message || 'Key quota exceeded or invalid'}]. Providing offline agronomist guidance:\n\n${fallback.answerText}`,

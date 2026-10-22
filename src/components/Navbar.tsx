@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { LanguageCode, UserRole, FarmerProfile } from '../types';
 import { translations } from '../i18n/translations';
+import { supabaseManager } from '../services/supabaseClient';
 
 interface NavbarProps {
   activeTab: string;
@@ -45,6 +46,7 @@ interface NavbarProps {
   onToggleTheme: () => void;
   farmerProfile: FarmerProfile | null;
   onOpenAuthModal: () => void;
+  onOpenSupabaseModal?: () => void;
   onLogout?: () => void;
 }
 
@@ -63,12 +65,14 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleTheme,
   farmerProfile,
   onOpenAuthModal,
+  onOpenSupabaseModal,
   onLogout
 }) => {
   const t = translations[language];
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showMoreDropdown, setShowMoreDropdown] = useState(false);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+  const supabaseStatus = supabaseManager.getStatus();
 
   // Farmer Primary Navigation Items (Exactly 5 items)
   const primaryNavItems = [
@@ -126,6 +130,25 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         <div className="flex items-center gap-2 sm:gap-3">
           
+          {/* Supabase Database Connection Button */}
+          {onOpenSupabaseModal && (
+            <button
+              onClick={onOpenSupabaseModal}
+              title={supabaseStatus.status === 'connected' ? 'Supabase Database Connected' : 'Supabase Key Configured: sb_publishable_jv_qDGe9OjvwPRxpDT7l8g_-8_laixj (Click to connect Project URL)'}
+              className={`px-2.5 py-1 rounded-xl border text-[11px] font-mono font-bold flex items-center gap-1.5 transition-all shadow-sm ${
+                supabaseStatus.status === 'connected'
+                  ? 'border-emerald-500/50 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
+                  : 'border-amber-500/50 bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300'
+              }`}
+            >
+              <Database className="w-3.5 h-3.5 text-emerald-500" />
+              <span className="hidden sm:inline">
+                {supabaseStatus.status === 'connected' ? 'Supabase Live' : 'Supabase DB'}
+              </span>
+              <span className={`w-2 h-2 rounded-full ${supabaseStatus.status === 'connected' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+            </button>
+          )}
+
           {/* Light / Dark Mode Toggle Button */}
           <button
             onClick={onToggleTheme}
@@ -187,6 +210,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <User className="w-3.5 h-3.5 text-emerald-600" />
                   <span>Edit Profile</span>
                 </button>
+
+                {onOpenSupabaseModal && (
+                  <button
+                    onClick={() => {
+                      setShowProfileDropdown(false);
+                      onOpenSupabaseModal();
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 text-left"
+                  >
+                    <Database className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Supabase Database (PostgreSQL)</span>
+                  </button>
+                )}
 
                 {onLogout && (
                   <button

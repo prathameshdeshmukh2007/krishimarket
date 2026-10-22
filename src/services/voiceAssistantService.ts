@@ -6,7 +6,7 @@ export interface VoiceAssistantResponse {
   category: 'CROP' | 'SEED' | 'PRICE' | 'WEATHER' | 'FINANCE' | 'EXOTIC' | 'GENERAL';
   actionSuggestion?: string;
   isOffTopic?: boolean;
-  providerUsed?: 'live_gemini' | 'live_openai' | 'expert_agronomist_engine';
+  providerUsed?: 'live_gemini' | 'live_openai' | 'live_claude' | 'expert_agronomist_engine';
 }
 
 /**

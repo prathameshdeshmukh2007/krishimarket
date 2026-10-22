@@ -50,8 +50,28 @@ assert.strictEqual(record1.lotId, 'lot-test-99');
 assert.strictEqual(record1.version, 1);
 console.log(`  ✓ Lot cloud record created with version ${record1.version} and coordinates ${record1.coordinates.lat}, ${record1.coordinates.lng}`);
 
-console.log('\n🎉 ALL AI & CLOUD STORAGE TESTS PASSED CLEANLY!\n');
+// 4. Verify Supabase Client & Publishable Key Integration
+import { supabaseManager, DEFAULT_SUPABASE_PUBLISHABLE_KEY } from '../src/services/supabaseClient.ts';
+
+console.log('\n▶ Test 4: Supabase PostgreSQL Client & Key Integration');
+assert.strictEqual(
+  DEFAULT_SUPABASE_PUBLISHABLE_KEY, 
+  'sb_publishable_jv_qDGe9OjvwPRxpDT7l8g_-8_laixj', 
+  'Verified user publishable key must be exact'
+);
+console.log('  ✓ Verified Publishable Key: ' + DEFAULT_SUPABASE_PUBLISHABLE_KEY);
+
+const ref = supabaseManager.extractProjectRef('https://krishimarket-db.supabase.co');
+assert.strictEqual(ref, 'krishimarket-db', 'Project reference extraction must parse host');
+console.log('  ✓ Project Ref extraction verified: ' + ref);
+
+const statusCheck = await supabaseManager.testConnection('', DEFAULT_SUPABASE_PUBLISHABLE_KEY);
+assert.strictEqual(statusCheck.status, 'needs_url', 'Empty URL must trigger needs_url status');
+console.log('  ✓ Supabase health check status flow verified (needs_url)');
+
+console.log('\n🎉 ALL AI, CLOUD & SUPABASE TESTS PASSED CLEANLY!\n');
 
 function cloudServiceAssessment(service) {
   return service.evaluateCropQuality('Onion', 'data:image/jpeg;base64,mockOnionData');
 }
+

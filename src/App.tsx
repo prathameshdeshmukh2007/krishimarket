@@ -22,6 +22,8 @@ import { GlobalTradeView } from './components/GlobalTradeView';
 import { CameraCaptureModal } from './components/CameraCaptureModal';
 import { AuthModal } from './components/AuthModal';
 import { VoiceAssistantModal } from './components/VoiceAssistantModal';
+import { SupabaseConnectionModal } from './components/SupabaseConnectionModal';
+import { supabaseDatabaseService } from './services/supabaseDatabaseService';
 import { DataIngestionService } from './services/dataIngestionService';
 import { 
   Commodity, 
@@ -180,6 +182,7 @@ export function App() {
   const [showGlobalCameraModal, setShowGlobalCameraModal] = useState<boolean>(false);
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [showVoiceModal, setShowVoiceModal] = useState<boolean>(false);
+  const [showSupabaseModal, setShowSupabaseModal] = useState<boolean>(false);
 
   // Cross-Navigation Context
   const [selectedCommodityForExplorer, setSelectedCommodityForExplorer] = useState<string>('Tomato');
@@ -263,12 +266,23 @@ export function App() {
 
   const handleAddCropLot = (newLot: CropLot) => {
     setCropLots([newLot, ...cropLots]);
+    supabaseDatabaseService.saveCropLot(newLot).catch(console.warn);
     setActiveTab('home');
   };
 
   const handleUpdateCropLot = (updatedLot: CropLot) => {
     setCropLots(prev => prev.map(lot => lot.id === updatedLot.id ? updatedLot : lot));
+    supabaseDatabaseService.saveCropLot(updatedLot).catch(console.warn);
   };
+
+  // Sync crop lots from Supabase if connected
+  useEffect(() => {
+    supabaseDatabaseService.getCropLots().then(lots => {
+      if (lots && lots.length > 0) {
+        setCropLots(lots);
+      }
+    }).catch(console.warn);
+  }, []);
 
   const handleAddAppointment = (appt: FarmVisitAppointment) => {
     setAppointments([appt, ...appointments]);
@@ -342,6 +356,7 @@ export function App() {
         onToggleTheme={handleToggleTheme}
         farmerProfile={farmerProfile}
         onOpenAuthModal={() => setShowAuthModal(true)}
+        onOpenSupabaseModal={() => setShowSupabaseModal(true)}
         onLogout={() => setIsLoggedIn(false)}
       />
 
@@ -650,6 +665,12 @@ export function App() {
         commodities={commodities}
         language={language}
         onLotCreated={handleAddCropLot}
+      />
+
+      <SupabaseConnectionModal
+        isOpen={showSupabaseModal}
+        onClose={() => setShowSupabaseModal(false)}
+        language={language}
       />
 
       {/* Footer */}
